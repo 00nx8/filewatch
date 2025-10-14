@@ -1,0 +1,17 @@
+[
+    {
+        "name": "projects",
+        "path": "C:/Users/tuzma/Documents/projects",
+        "owner": "lajos"
+    },
+    {
+        "name": "filewatcher",
+        "path": "C:/Users/tuzma/Documents/filewatcher",
+        "owner": "lajos"
+    },
+    {
+        "name": "lms",
+        "path": "\\\\wsl.localhost/Ubuntu/home/tuzma/lms",
+        "owner": "lajos"
+    }
+]
