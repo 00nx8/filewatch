@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -15,7 +16,6 @@ import (
 
 // TODO:
 // Newly created directories are not being watched.
-//
 
 // initialise a watcher with directories and subdirectories of a directory and start it.
 func InitWatcher() {
@@ -53,7 +53,7 @@ func sendEventToServer(eventType, filePath string) {
 		return
 	}
 
-	resp, err := http.Post("http://your-remote-server.com/api/events", "application/json", bytes.NewBuffer(data))
+	resp, err := http.Post("http://localhost:8080/api/events", "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		fmt.Println("Failed to send event:", err)
 		return
@@ -105,7 +105,7 @@ func filewatch(watcher *fsnotify.Watcher) {
 
 // reads the contents of the default json file and loads the saved directories into a []helper.DirectoryInformation
 func loadSavedDirectories() []helper.DirectoryInformation {
-	data, err := os.ReadFile("head_directories.json")
+	data, err := os.ReadFile("./pkg/filewatch/head_directories.json")
 
 	helper.IsError(err)
 
@@ -118,8 +118,20 @@ func loadSavedDirectories() []helper.DirectoryInformation {
 
 // map out sub directories and files of a given directory.
 func discoverSubDirectories(watcher *fsnotify.Watcher, dir string) error {
+	// Open and check path status
 	targetInfo, err := os.Stat(dir)
-	helper.IsError(err)
+
+	if os.IsNotExist(err) {
+		strs := []string{"Directory at ", dir, "Does not exist. Would you like to create it?"}
+		res := helper.AskChoice(strings.Join(strs, "\n"))
+
+		if !res {
+			return err
+		}
+
+		helper.CreateDirectory(dir)
+		return discoverSubDirectories(watcher, dir)
+	}
 
 	if !targetInfo.IsDir() {
 		return fmt.Errorf("provide a directory: %v", dir)
@@ -127,7 +139,6 @@ func discoverSubDirectories(watcher *fsnotify.Watcher, dir string) error {
 
 	entries, err := os.ReadDir(dir)
 	helper.IsError(err)
-
 	watcher.Add(dir)
 
 	for _, entry := range entries {
