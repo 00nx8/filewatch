@@ -2,39 +2,37 @@ import json
 import os 
 import time
 from watchdog.observers import Observer # type: ignore
-from handler import Handler, request_unique_id, connect
+from handler import Handler, request_unique_id
 import asyncio
 
 async def main():
     print('loading client...')
     
     directories = []
-
+    config = None
     with open('head_directories.json') as f:
         head_directories = json.load(f)
         directories = normalize_directories(head_directories['directories'])
-    
+        config = head_directories['device']
         if head_directories['device']['device_id'] == 0:
             print('No device id found.')
             _id = await request_unique_id()
             print(f'Registering device with id: {_id}')
-
+            config['device_id'] = _id
             head_directories['device']['device_id'] = _id
             with open('head_directories.json', 'w') as w:
                 json.dump(head_directories, w)
 
     print('Loaded directories')
 
-    initialize_observer(directories)
+    initialize_observer(directories, config['device_id'])
     
-    print('Connecting socket to server')
-    asyncio.run(connect())
     
-def initialize_observer(directories):
+def initialize_observer(directories, _id):
     observer = Observer()
 
     for directory in directories:
-        observer.schedule(Handler(), path=directory, recursive=True)
+        observer.schedule(Handler(_id), path=directory, recursive=True)
         print(f'added directory {directory} to observer')
 
     observer.start()
