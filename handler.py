@@ -1,4 +1,6 @@
-from watchdog.events import FileSystemEventHandler # type: ignore
+from watchdog.events import FileSystemEventHandler, DirModifiedEvent, DirCreatedEvent, FileCreatedEvent, FileModifiedEvent, DirDeletedEvent, FileDeletedEvent
+from typing import Optional, Dict, Any
+from pathlib import Path
 import requests
 import os
 import dotenv
@@ -16,41 +18,73 @@ class Handler(FileSystemEventHandler):
         self._id = _id
         self.event = None
         self.target = None
+        self.data_template = {
+            'id': self._id,
+            'path': '',
+            'dest_path': '',
+            'event_type': '',
+            'is_directory': False
+        }
 
     def on_modified(self, event):
         print(f"Modified: {event.src_path}")
-        self.event = event
-        self.send_update()
-    
-    def on_created(self, event):
-        print(f"Created: {event.src_path}")
-        self.event = event
-        self.send_update()
-
-    def on_deleted(self, event):
-        print(f"Deleted: {event.src_path}")
-        self.event = event
-        self.send_update()
-
-    def on_moved(self, event):
-        print(f"Moved: {event.src_path} to {event.dest_path}")
-        self.event = event
-        self.send_update()
-
-    def send_update(self):
-        if not self.event:
+        if not type(event) == FileModifiedEvent:
             return
         
-        # setup different handling for directories/files
-        with open(self.event.src_path, 'rb') as f:
+        with open(event.src_path, 'rb') as f:
+            data = self.data_template
+            data['path'] = event.src_path
+            data['event_type'] = event.event_type
             r = requests.post(
-                url=API_PATH + f'/event/{self.event.event_type}',
+                url=API_PATH + f'/event/{event.event_type}',
                 files={ 'files': f },
-                data={
-                    'path': self.event.src_path,
-                    'device_id': self._id
-                }
+                data=self.data_template
             )
+
+    def on_created(self, event):
+        files: Optional[Dict[str, Any]] = {
+            'files': None
+        }
+
+        if not event.is_directory:
+            path = os.fsdecode(event.src_path)
+            filename = Path(path).name
+
+            with open(event.src_path, 'rb') as f:
+                files['files'] = (filename, f.read())
+
+        data = self.data_template
+
+        data['path'] = event.src_path
+        data['dest_path'] = event.dest_path or ''
+        data['is_directory'] = event.is_directory
+        data['event_type'] = event.event_type
+
+        r = requests.post(
+            url=API_PATH + f'/event/{event.event_type}',
+            files=files,
+            data=data
+        )
+
+    def on_deleted(self, event):
+        r = requests.delete(
+            url=API_PATH + f"/{event.event_type}",
+            data={
+                'path': event.src_path,
+                'device_id': self._id
+            }
+        )
+
+    def on_moved(self, event):
+        data = self.data_template
+        data['path'] = event.src_path
+        data['dest_path'] = event.dest_path
+        data['is_directory'] = event.is_directory
+
+        r = requests.delete(
+            url=API_PATH + f"/{event.event_type}",
+            data=data
+        )
 
 
 async def request_unique_id():
