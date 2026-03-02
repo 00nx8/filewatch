@@ -2,7 +2,8 @@ import json
 import os 
 import time
 from watchdog.observers import Observer # type: ignore
-from handler import Handler, request_unique_id
+from handler import Handler, request_unique_id, submit_local_directories
+import pprint
 import asyncio
 
 async def main():
@@ -10,24 +11,72 @@ async def main():
     
     directories = []
     config = None
+    
     with open('head_directories.json') as f:
         head_directories = json.load(f)
         directories = normalize_directories(head_directories['directories'])
         config = head_directories['device']
-        if head_directories['device']['device_id'] == 0:
+
+        if not config['device_id'] or config['device_id'] == 0:
             print('No device id found.')
             _id = await request_unique_id()
+        
             print(f'Registering device with id: {_id}')
             config['device_id'] = _id
             head_directories['device']['device_id'] = _id
             with open('head_directories.json', 'w') as w:
                 json.dump(head_directories, w)
+        
+        print('Sending local directories to remote.')        
+        res = await submit_local_directories(directories, config['device_id'])
+        data = json.loads(res.content.decode())
+        if (data.get('made_directories')):
+            print('Directories found that dont exist on remote.')
+            directories_of_made = get_untracked_files(data.get('made_directories'))
+            # TODO send to backend
 
+        
+        print(data)
+            
     print('Loaded directories')
 
     initialize_observer(directories, config['device_id'])
-    
-    
+
+tree = {
+    '/projects': {
+
+    }
+}
+
+def get_untracked_files(dirs):
+    tree = []
+    for _dir in dirs:
+        tree.append(discover_directory(_dir))     
+
+    pprint.pp(tree)
+
+def discover_directory(_dir):
+    tree = {
+        'directory': _dir
+    }
+    tree['sub_directories'] = []
+    tree['files'] = []
+
+    for entry in os.listdir(_dir):
+        path = f'{_dir}/{entry}'
+        if os.path.isdir(path):
+            sub_dirs = discover_directory(path)
+            tree['sub_directories'].append(sub_dirs)
+            continue
+
+        with open(path, 'rb') as f:
+            tree['files'].append((
+                entry, f.read()
+            ))
+
+    return tree
+
+
 def initialize_observer(directories, _id):
     observer = Observer()
 
@@ -76,7 +125,7 @@ def normalize_directories(dirs):
     return directories
 
 def handle_missing_entry(action, _dir) -> bool:
-    """Returns true if the directory was created, false if file encountered or directory was not created.
+    """Determine what to do if monitored entry is missing on local.
 
     Args:
         action (bool): to create create missing entry or not
@@ -126,4 +175,7 @@ def ask_choice(question):
     return response.lower() == 'y'
 
 if __name__ == "__main__":    
-    asyncio.run(main())
+    # asyncio.run(main())
+    get_untracked_files([
+        '/home/tuzma/Documents/projects'
+    ])

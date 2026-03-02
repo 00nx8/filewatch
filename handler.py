@@ -86,6 +86,14 @@ class Handler(FileSystemEventHandler):
             data=data
         )
 
+async def submit_local_directories(directories, _id):
+    return requests.post(
+        url=f'{API_PATH}/submit_directories',
+        data={
+            'directories': directories,
+            'device_id': _id
+        }
+    )
 
 async def request_unique_id():
     r = requests.get(API_PATH + '/unique_id')
@@ -95,12 +103,3 @@ async def request_unique_id():
         return False
 
     return data['unique_id'] 
-
-
-# PROTOCOL
-# New device:
-# request unique id,
-# save
-# go through added directories, note down last modified for files.
-# send to server
-# 
